@@ -120,16 +120,20 @@ async def get_games(channel, theCache):
 
     dtDiff = dtUtcNow - dtEnd
 
+    net_raw = 0
     total_raw = 0
     for player in game:
+      if player.attrib['raw_new']:
+        total_raw += int(player.attrib['raw_new'])
       if player.attrib['raw_change']:
-        total_raw += int(player.attrib['raw_change'])
+        net_raw += int(player.attrib['raw_change'])
+    avg_raw = math.floor(total_raw / 6.0)
 
     if not (game.attrib['game_id'] in theCache):
       latestGames += game.attrib['map'] + ", " + \
                      game.attrib['numberHumans'] + " humans, " + \
                      str(math.floor(dtDiff.total_seconds() / 60.0)) + " minutes ago - " + \
-                     str(total_raw) + " net raw\n"
+                     str(avg_raw) + " avg raw, " + str(net_raw) + " net change\n"
                      #game.attrib['end'] + "\n"
 
     if (classic_role and game.attrib['map'].startswith('Classic') and
@@ -143,7 +147,7 @@ async def get_games(channel, theCache):
       bioTime = bio_role.mention + " It's Bio FULL HOUSE time! " + \
                 game.attrib['numberHumans'] + " humans finished a game " + \
                 str(math.floor(dtDiff.total_seconds() / 60.0)) + " minutes ago, " + \
-                str(total_raw) + " net raw"
+                str(avg_raw) + " avg raw, " + str(net_raw) + " net change\n"
 
 
   # Reset the cache
