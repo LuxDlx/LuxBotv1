@@ -8,7 +8,7 @@ import math
 import asyncio
 
 # Number of seconds between polling the recent games
-POLL_FREQUENCY = 600
+POLL_FREQUENCY = 300
 
 client = discord.Client()
 
@@ -40,6 +40,8 @@ If you'd like to receive notifications for Bio full-house games, type:
 ```.iwant bio```
 If you'd like to receive notifications for _any_ ranked Classic games, type:
 ```.iwant classic```
+If you'd like to receive notifications for high average RAW games, type:
+```.iwant highraw```
 If you want something else, talk to SecondTermMistake. Enjoy!
 """
 
@@ -49,6 +51,9 @@ async def on_member_join(member):
     # Get our primary channel where we'll welcome people
     channel = discord.utils.get(guild.text_channels, name="general")
 
+    welcome_message(channel, member)
+
+async def welcome_message(channel, member):
     print("Recognised that a member called " + member.name + " joined")
     try: 
       await channel.send("Hello " + member.mention + "\n" + newUserMessage)
@@ -80,6 +85,9 @@ async def on_message(message):
   if message.content.startswith('.rankings'):
     await display_rankings(message.channel, playerCache)
 
+  if message.content.startswith('.help'):
+    await welcome_message(message.channel, playerCache)
+
 
 async def display_rankings(channel, players):
   sorted_players = sorted(players.items(), key=lambda x: x[1], reverse=True)
@@ -106,11 +114,14 @@ async def get_games(channel, theCache, thePlayers):
   # Find roles so we can ping them
   classic_role = None
   bio_role = None
+  highraw = None
   for role in guild.roles:
     if (role.name == "Classic"):
       classic_role = role
     if (role.name == "Bio"):
       bio_role = role
+    if (role.name == "HighRaw"):
+      highraw = role
 
   stm = None
   for member in guild.members:
@@ -155,6 +166,11 @@ async def get_games(channel, theCache, thePlayers):
                      str(math.floor(dtDiff.total_seconds() / 60.0)) + " minutes ago - " + \
                      str(avg_raw) + " avg raw, " + str(net_raw) + " net change\n"
                      #game.attrib['end'] + "\n"
+
+
+      if avg_raw >= 900:
+        await channel.send(highraw.mention + " We just saw a game with " + \
+                           str(avg_raw) + " avg raw, come and get some!")
 
       # do we know STMs raw?
       stm_raw = 0
