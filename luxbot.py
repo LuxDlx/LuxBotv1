@@ -138,39 +138,40 @@ async def get_games(channel, theCache, thePlayers):
 
     beforeRaw = thePlayers.copy()
 
-    net_raw = 0
-    total_raw = 0
-    for player in game:
-      if player.attrib['raw_new']:
-        total_raw += int(player.attrib['raw_new'])
-        # Update player raw
-        thePlayers[player.attrib['nick']] = int(player.attrib['raw_new'])
-      if player.attrib['raw_change']:
-        net_raw += int(player.attrib['raw_change'])
-    avg_raw = math.floor(total_raw / 6.0)
-
-    # do we know STMs raw?
-    stm_raw = 0
-    for player in thePlayers:
-      if player == "SecondTermMistake":
-        stm_raw = thePlayers[player]
-    for player in game:
-      # the player has new raw, were in the before raw
-      # their before raw was less than STMs, but their 
-      # now raw is more than STMs, then let STM know
-      if (player.attrib['raw_new'] and
-          player.attrib['nick'] != "SecondTermMistake" and
-          player.attrib['nick'] in beforeRaw and
-          beforeRaw[player.attrib['nick']] <= stm_raw and
-          thePlayers[player.attrib['nick']] >= stm_raw):
-        await channel.send(stm.mention + ", " + player.attrib['nick'] + " just passed you in raw!") 
-
     if not (game.attrib['game_id'] in theCache):
+      net_raw = 0
+      total_raw = 0
+      for player in game:
+        if player.attrib['raw_new']:
+          total_raw += int(player.attrib['raw_new'])
+          # Update player raw
+          thePlayers[player.attrib['nick']] = int(player.attrib['raw_new'])
+        if player.attrib['raw_change']:
+          net_raw += int(player.attrib['raw_change'])
+      avg_raw = math.floor(total_raw / 6.0)
+
       latestGames += game.attrib['map'] + ", " + \
                      game.attrib['numberHumans'] + " humans, " + \
                      str(math.floor(dtDiff.total_seconds() / 60.0)) + " minutes ago - " + \
                      str(avg_raw) + " avg raw, " + str(net_raw) + " net change\n"
                      #game.attrib['end'] + "\n"
+
+      # do we know STMs raw?
+      stm_raw = 0
+      for player in thePlayers:
+        if player == "SecondTermMistake":
+          stm_raw = thePlayers[player]
+      for player in game:
+        # the player has new raw, were in the before raw
+        # their before raw was less than STMs, but their 
+        # now raw is more than STMs, then let STM know
+        if (player.attrib['raw_new'] and
+            player.attrib['nick'] != "SecondTermMistake" and
+            player.attrib['nick'] in beforeRaw and
+            beforeRaw[player.attrib['nick']] <= stm_raw and
+            thePlayers[player.attrib['nick']] >= stm_raw):
+          await channel.send(stm.mention + ", " + player.attrib['nick'] + " just passed you in raw!") 
+
 
     if (classic_role and game.attrib['map'].startswith('Classic') and
         not (game.attrib['game_id'] in theCache)):
