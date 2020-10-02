@@ -136,6 +136,8 @@ async def get_games(channel, theCache, thePlayers):
   classicTime = False
   bioTime = False
   latestGames = ""
+
+  mostRaw = 0
   
   tree = ET.fromstring(resp.content)
   for game in tree:
@@ -168,9 +170,8 @@ async def get_games(channel, theCache, thePlayers):
                      #game.attrib['end'] + "\n"
 
 
-      if avg_raw >= 900:
-        await channel.send(highraw.mention + " We just saw a game with " + \
-                           str(avg_raw) + " avg raw, come and get some!")
+      if avg_raw >= mostRaw:
+        mostRaw = avg_raw
 
       # do we know STMs raw?
       stm_raw = 0
@@ -202,6 +203,12 @@ async def get_games(channel, theCache, thePlayers):
                 str(math.floor(dtDiff.total_seconds() / 60.0)) + " minutes ago, " + \
                 str(avg_raw) + " avg raw, " + str(net_raw) + " net change\n"
 
+  sorted_players = list(map(lambda x: int(x[1]), sorted(thePlayers.items(), key=lambda x: x[1], reverse=True)))
+  high_raw = 0.85 * sum(sorted_players[0:3]) / len(sorted_players[0:3])
+  print(mostRaw, high_raw)
+  if mostRaw > high_raw:
+    await channel.send(highraw.mention + " We just saw a game with " + \
+                       str(mostRaw) + " avg raw, come and get some!")
 
   # Reset the cache
   theCache.clear()
