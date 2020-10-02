@@ -86,7 +86,7 @@ async def on_message(message):
     await display_rankings(message.channel, playerCache)
 
   if message.content.startswith('.help'):
-    await welcome_message(message.channel, playerCache)
+    await welcome_message(message.channel, message.author)
 
 
 async def display_rankings(channel, players):
