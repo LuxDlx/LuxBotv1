@@ -123,10 +123,10 @@ async def get_games(channel, theCache, thePlayers):
     if (role.name == "HighRaw"):
       highraw = role
 
-  stm = None
-  for member in guild.members:
-    if (member.name == "jestelle"):
-      stm = member
+#  stm = None
+#  for member in guild.members:
+#    if (member.name == "jestelle"):
+#      stm = member
 
   url = 'http://sillysoft.net/lux/xml/gameHistory.php?lastGames=10'
   
@@ -187,7 +187,7 @@ async def get_games(channel, theCache, thePlayers):
             player.attrib['nick'] in beforeRaw and
             beforeRaw[player.attrib['nick']] <= stm_raw and
             thePlayers[player.attrib['nick']] >= stm_raw):
-          await channel.send(stm.mention + ", " + player.attrib['nick'] + " just passed you in raw!") 
+          await channel.send("<@!182175563115528192>" + ", " + player.attrib['nick'] + " just passed you in raw!") 
 
 
     if (classic_role and game.attrib['map'].startswith('Classic') and
