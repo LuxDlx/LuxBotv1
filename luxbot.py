@@ -6,6 +6,9 @@ import pytz
 import math
 
 import asyncio
+import subprocess
+import threading
+import re
 
 # Number of seconds between polling the recent games
 POLL_FREQUENCY = 300
@@ -13,6 +16,7 @@ POLL_FREQUENCY = 300
 client = discord.Client()
 
 secret = 'THIS ISNT THE REAL SECRET'
+regcode = 'THIS ISNT THE REAL REGCODE'
 
 gameCache = {}
 
@@ -64,6 +68,9 @@ async def welcome_message(channel, member):
 @client.event
 async def on_ready():
   print('We have logged in as {0.user}'.format(client))
+
+  await start_host()
+
 
 @client.event
 async def on_message(message):
@@ -207,7 +214,7 @@ async def get_games(channel, theCache, thePlayers):
   high_raw = 0.85 * sum(sorted_players[0:3]) / len(sorted_players[0:3])
   print(mostRaw, high_raw)
   if mostRaw > high_raw:
-    await channel.send(highraw.mention + " We just saw a game with " + \
+    await channel.send("zzzz" + highraw.mention + " We just saw a game with " + \
                        str(mostRaw) + " avg raw, come and get some!")
 
   # Reset the cache
@@ -222,6 +229,38 @@ async def get_games(channel, theCache, thePlayers):
     await channel.send(classicTime)
   if (bioTime):
     await channel.send(bioTime)
+
+
+
+ip_addr_regex = re.compile(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b')
+
+def output_reader(proc):
+    # Assumes bot is only connected to one server
+    guild = client.guilds[0]
+    channel = discord.utils.get(guild.text_channels, name="stm-host")
+
+    for line in iter(proc.stdout.readline, b''):
+        strline = re.sub(ip_addr_regex, "---", line.decode('utf-8'))
+        print('got line: {0}'.format(strline), end='')
+        await channel.send(strline)
+
+
+async def start_host():
+    proc = subprocess.Popen(['linux-private-jre8_73-64bit/bin/java',
+                             '-Djava.awt.headless=true', '-cp', 'LuxCore.jar:lib/*',
+                             'com.sillysoft.lux.Lux', '-headless', '-network=true', '-public=true',
+                             '-name=STM_',
+                             '-desc=Brought to you by SecondTermMistake. Join my Discord server (https://discord.gg/pfEVcqR).',
+                             '-shuffle3', '-nofirstturncontbonus', '-agent=reapermix',
+                             '-regcode=' + regcode,
+                             '-map=BioDeux-extreme', '-cards=5e25', '-conts=25', '-time=25', '-gamelimit=45'],
+                             cwd='/home/josh_estelle/LuxDelux',
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT)
+
+    t = threading.Thread(target=output_reader, args=(proc,))
+    t.start()
+
 
 
 client.loop.create_task(poll_games())
