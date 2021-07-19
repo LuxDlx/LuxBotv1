@@ -22,6 +22,8 @@ gameCache = {}
 
 playerCache = {}
 
+processHolder = {}
+
 async def poll_games():
   await client.wait_until_ready()
 
@@ -69,13 +71,21 @@ async def welcome_message(channel, member):
 async def on_ready():
   print('We have logged in as {0.user}'.format(client))
 
-  await start_host()
-
 
 @client.event
 async def on_message(message):
   if message.author == client.user:
     return
+
+  if(message.channel.name == 'stm-host'):
+    if ('proc' in processHolder):
+        proc = processHolder['proc']
+        # this probably has security issues
+        if (message.author.id == NOT_SO_SECRET_ID and message.content.startswith('.send ')):
+          proc.stdin.write((message.content[6:]).encode() + b'\n')
+        else:
+          proc.stdin.write(("(discord) " + message.author.nick + ": " + message.content).encode() + b'\n')
+        await proc.stdin.drain()
 
   if message.content.startswith('hello'):
     await message.channel.send('Hello!')
@@ -149,7 +159,9 @@ async def get_games(channel, theCache, thePlayers):
   tree = ET.fromstring(resp.content)
   for game in tree:
     # Assumes daylight savings time right now
-    dtEnd = datetime.datetime.strptime(game.attrib['end'] + "-0400", "%Y-%m-%d %H:%M:%S%z")
+    dtEnd = datetime.datetime.strptime(game.attrib['end'] + "-0000", "%Y-%m-%d %H:%M:%S%z")
+    # This one is for not daylight savings
+    #dtEnd = datetime.datetime.strptime(game.attrib['end'] + "-0500", "%Y-%m-%d %H:%M:%S%z")
 
     dtUtcNow = datetime.datetime.utcnow()
     dtUtcNow = dtUtcNow.replace(tzinfo=pytz.utc)
@@ -214,7 +226,7 @@ async def get_games(channel, theCache, thePlayers):
   high_raw = 0.85 * sum(sorted_players[0:3]) / len(sorted_players[0:3])
   print(mostRaw, high_raw)
   if mostRaw > high_raw:
-    await channel.send("zzzz" + highraw.mention + " We just saw a game with " + \
+    await channel.send(highraw.mention + " We just saw a game with " + \
                        str(mostRaw) + " avg raw, come and get some!")
 
   # Reset the cache
@@ -234,34 +246,50 @@ async def get_games(channel, theCache, thePlayers):
 
 ip_addr_regex = re.compile(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b')
 
-def output_reader(proc):
+supress_if_match = [
+            re.compile(r'Crash check: timeRunningMinutes'),
+            re.compile(r'STM : \(discord\)')
+        ]
+
+async def start_host():
+    await client.wait_until_ready()
+
     # Assumes bot is only connected to one server
     guild = client.guilds[0]
     channel = discord.utils.get(guild.text_channels, name="stm-host")
 
-    for line in iter(proc.stdout.readline, b''):
-        strline = re.sub(ip_addr_regex, "---", line.decode('utf-8'))
-        print('got line: {0}'.format(strline), end='')
-        await channel.send(strline)
-
-
-async def start_host():
-    proc = subprocess.Popen(['linux-private-jre8_73-64bit/bin/java',
+#                             '-desc=Brought to you by SecondTermMistake. Join my Discord server (https://discord.gg/pfEVcqR).',
+    proc = await asyncio.create_subprocess_exec('linux-private-jre8_73-64bit/bin/java',
                              '-Djava.awt.headless=true', '-cp', 'LuxCore.jar:lib/*',
                              'com.sillysoft.lux.Lux', '-headless', '-network=true', '-public=true',
                              '-name=STM_',
-                             '-desc=Brought to you by SecondTermMistake. Join my Discord server (https://discord.gg/pfEVcqR).',
+                             '-desc=Be nice. No calling people stupid. Have fun. Discord: https://discord.gg/pfEVcqR',
                              '-shuffle3', '-nofirstturncontbonus', '-agent=reapermix',
                              '-regcode=' + regcode,
-                             '-map=BioDeux-extreme', '-cards=5e25', '-conts=25', '-time=25', '-gamelimit=45'],
+                             '-map=BioDeux-extreme', '-cards=5e25', '-conts=25', '-time=28', '-gamelimit=45',
                              cwd='/home/josh_estelle/LuxDelux',
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT)
+                             stdin=asyncio.subprocess.PIPE,
+                             stdout=asyncio.subprocess.PIPE,
+                             stderr=asyncio.subprocess.PIPE)
+    processHolder['proc'] = proc
 
-    t = threading.Thread(target=output_reader, args=(proc,))
-    t.start()
-
+    while True:
+        line = await proc.stdout.readline()
+        print('got line: {0}'.format(line.decode('utf-8')), end='')
+        strline = re.sub(ip_addr_regex, "---", line.decode('utf-8'))
+        if (len(strline) > 0):
+            found = False
+            for supress in supress_if_match:
+                if(re.match(supress, strline)):
+                    found=True
+                    break
+            if (not found):
+                try:
+                    await channel.send(strline)
+                except discord.errors.HTTPException:
+                    pass
 
 
 client.loop.create_task(poll_games())
+client.loop.create_task(start_host())
 client.run(secret)
