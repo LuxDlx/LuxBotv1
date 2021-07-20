@@ -15,7 +15,7 @@ from firebase_admin import credentials
 from firebase_admin import firestore
 
 # Number of seconds between polling the recent games
-POLL_FREQUENCY = 300
+POLL_FREQUENCY = 30
 
 MENTIONS_ON = False
 
@@ -41,12 +41,12 @@ firebase_admin.initialize_app(cred, {
 
 db = firestore.client()
 
-doc_ref = db.collection(u'users').document(u'alovelace')
-doc_ref.set({
-    u'first': u'Ada',
-    u'last': u'Lovelace',
-    u'born': 1815
-})
+#doc_ref = db.collection(u'users').document(u'alovelace')
+#doc_ref.set({
+#    u'first': u'Ada',
+#    u'last': u'Lovelace',
+#    u'born': 1815
+#})
 
 
 
@@ -59,7 +59,7 @@ async def poll_games():
   channel = discord.utils.get(guild.text_channels, name="luxbot")
 
   while True:  # TODO(jestelle) Maybe only loop while connected?
-    await get_games(channel, gameCache, playerCache)
+    await get_tracker(channel, gameCache, playerCache)
     await asyncio.sleep(POLL_FREQUENCY)
 
 newUserMessage = """
@@ -68,6 +68,16 @@ Welcome to the bestest, Lux Delux'iest discord server around.
 Here you can chat about Lux if you want, but better yet you can
 sign up for notifications of people actively playing.
 
+First, tell us your Lux user name by typing:
+```.iam <username>```
+for example, ```.iam SecondTermMistake```
+
+Then type ```.iwant <min humans>```
+to get notifications when there are at least <min humans>
+available to play. e.g., `.iwant 2`
+"""
+
+old123 = """
 If you'd like to receive notifications for Bio full-house games, type:
 ```.iwant bio```
 If you'd like to receive notifications for _any_ ranked Classic games, type:
@@ -117,12 +127,12 @@ async def on_message(message):
     await message.channel.send('Hello!')
 
   if message.content.startswith('.checknow'):
-    await get_games(message.channel, gameCache, playerCache);
+    await get_tracker(message.channel, gameCache, playerCache);
 
-  if message.content.startswith('.iwant'):
+  if message.content.startswith('.iplay'):
     await add_roles(message.author, message.channel, message.content[7:], True)
 
-  if message.content.startswith('.idontwant'):
+  if message.content.startswith('.idontplay'):
     await add_roles(message.author, message.channel, message.content[11:], False)
 
   if message.content.startswith('.rankings'):
@@ -130,6 +140,57 @@ async def on_message(message):
 
   if message.content.startswith('.help'):
     await welcome_message(message.channel, message.author)
+
+  if message.content.startswith('.iwant'):
+    await configure_notifs(message.author, message.channel, message.content[7:])
+
+  if message.content.startswith('.iam'):
+    if len(message.content) > 5:
+      doc_ref = db.collection(u'users').document(str(message.author.id))
+      doc_ref.set({
+        u'username': message.content[5:],
+        u'mention': message.author.mention
+      })
+      await message.channel.send("Thanks " + message.author.mention + "\n" + \
+                                 "Will give you notifications about ```" + \
+                                 message.content[5:] + "```\n" + \
+                                 "Please type ```.iwant <min humans>```" + \
+                                 "to get notifications when there are at least <min humans> " +\
+                                 "available to play. e.g., `.iwant 2`")
+    else:
+      doc_ref = db.collection(u'users').document(str(message.author.id))
+      doc = doc_ref.get()
+      if doc.exists and 'username' in doc.to_dict():
+        await message.channel.send(message.author.mention + " is known as " + \
+                                   doc.to_dict()['username'])
+      else:
+        await message.channel.send("Sorry " + message.author.mention + ", " + \
+                                   "We don't know who you are. Please tell us " + \
+                                   "with ```.iam <username>```")
+
+
+async def configure_notifs(member, channel, number):
+  doc_ref = db.collection(u'users').document(str(member.id))
+  doc = doc_ref.get()
+
+  if len(number) > 0:
+    # TODO catch error when number isn't a number
+    doc_ref.update({
+      u'num': int(number)
+    })
+    await channel.send("Thanks " + member.mention + "\n" + \
+                       "Will give you notifications when there are " + \
+                       str(int(number)) + " humans available to play.")
+  else:
+    if doc.exists and 'num' in doc.to_dict() and doc.to_dict()['num'] > 0:
+      await channel.send(member.mention + " will be notified when " + \
+                         str(doc.to_dict()['num']) + " humans are available to play.")
+    else:
+      await channel.send("Ummm " + member.mention + ", " + \
+                         "We don't know what you want. Please tell us " + \
+                         "with for example: ```.iwant 5``` if you want to be notified " + \
+                         "when it's _almost_ a full house.")
+
 
 
 async def display_rankings(channel, players):
@@ -151,6 +212,48 @@ async def add_roles(member, channel, role_str, add):
         await channel.send(member.mention + " will no longer be notified about " + role.name + " games.\n" + \
                            "Turn on with ```.iwant " + role.name + "```")
 
+
+async def get_tracker(channel, theCache, thePlayers):
+  # first check the tracker
+  tracker = 'https://sillysoft.net/lux/list503.php'
+  tr_resp = requests.get(tracker)
+
+  now = datetime.datetime.utcnow().replace(tzinfo=pytz.UTC)
+  now_plus_10 = now + datetime.timedelta(minutes = 10)
+
+  docs = db.collection(u'users').stream()
+  docsAll = []
+  for doc in docs:
+    docsAll.append(doc)
+
+  tr_tree = ET.fromstring(tr_resp.content)
+  muteMe = []
+  for host in tr_tree.findall('host'):
+    mapDesc = host.find('boardSize').text
+    playerNames = host.find('playerNames').text
+    guestNames = host.find('guestNames').text or ""
+    numPlayers = int(host.find('numberOfPlayers').text.split("/",1)[-1])
+    print(mapDesc, numPlayers, playerNames)
+    if "Classic" in mapDesc or "BioDeux" in mapDesc:
+      mentionList = []
+      for doc in docsAll:
+        docDict = doc.to_dict()
+        if 'num' in docDict and \
+           docDict['num'] <= numPlayers and \
+           not (docDict['username'] in playerNames) and \
+           not (docDict['username'] in guestNames) and \
+           (not 'muted' in docDict or docDict['muted'].replace(tzinfo=pytz.UTC) <= now):
+          mentionList.append(docDict['mention'])
+          muteMe.append(doc.id)
+      if len(mentionList) > 0:
+        await channel.send("".join(mentionList) + " come and join us for `" + \
+                           mapDesc + "`, there's `" + str(numPlayers) + "` waiting.")
+      
+  for muteId in muteMe:
+    doc_ref = db.collection(u'users').document(muteId)
+    doc_ref.update({
+      u'muted': now_plus_10
+    })
 
 async def get_games(channel, theCache, thePlayers):
   guild = channel.guild
