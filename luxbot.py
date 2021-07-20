@@ -10,8 +10,14 @@ import subprocess
 import threading
 import re
 
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
+
 # Number of seconds between polling the recent games
 POLL_FREQUENCY = 300
+
+MENTIONS_ON = False
 
 intents = discord.Intents.default()
 intents.members = True
@@ -25,6 +31,24 @@ gameCache = {}
 playerCache = {}
 
 processHolder = {}
+
+
+# Use the application default credentials
+cred = credentials.ApplicationDefault()
+firebase_admin.initialize_app(cred, {
+  'projectId': 'botsetc',
+})
+
+db = firestore.client()
+
+doc_ref = db.collection(u'users').document(u'alovelace')
+doc_ref.set({
+    u'first': u'Ada',
+    u'last': u'Lovelace',
+    u'born': 1815
+})
+
+
 
 async def poll_games():
   await client.wait_until_ready()
@@ -212,14 +236,16 @@ async def get_games(channel, theCache, thePlayers):
 
 
     if (classic_role and game.attrib['map'].startswith('Classic') and
-        not (game.attrib['game_id'] in theCache)):
-      classicTime = \#classic_role.mention + " It's Classic time! " + \ DISABLED
+        not (game.attrib['game_id'] in theCache) and
+        MENTIONS_ON):
+      classicTime = classic_role.mention + " It's Classic time! " + \
                     game.attrib['numberHumans'] + " humans finished a game " + \
                     str(math.floor(dtDiff.total_seconds() / 60.0)) + " minutes ago"
     if (bio_role and game.attrib['map'].startswith('BioDeux') and
         int(game.attrib['numberHumans']) >= 6 and
-        not (game.attrib['game_id'] in theCache)):
-      bioTime = \#bio_role.mention + " It's Bio FULL HOUSE time! " + \ DISABLED
+        not (game.attrib['game_id'] in theCache) and
+        MENTIONS_ON):
+      bioTime = bio_role.mention + " It's Bio FULL HOUSE time! " + \
                 game.attrib['numberHumans'] + " humans finished a game " + \
                 str(math.floor(dtDiff.total_seconds() / 60.0)) + " minutes ago, " + \
                 str(avg_raw) + " avg raw, " + str(net_raw) + " net change\n"
@@ -227,7 +253,7 @@ async def get_games(channel, theCache, thePlayers):
   sorted_players = list(map(lambda x: int(x[1]), sorted(thePlayers.items(), key=lambda x: x[1], reverse=True)))
   high_raw = 0.85 * sum(sorted_players[0:3]) / len(sorted_players[0:3])
   print(mostRaw, high_raw)
-  if mostRaw > high_raw and False: # DISABLED
+  if mostRaw > high_raw and MENTIONS_ON:
     await channel.send(highraw.mention + " We just saw a game with " + \
                        str(mostRaw) + " avg raw, come and get some!")
 
